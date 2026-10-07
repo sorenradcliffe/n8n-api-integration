@@ -1,25 +1,50 @@
 # n8n OpenAI-compatible API integration
 
-This guide covers a general n8n HTTP Request pattern for chat and image endpoints. It is independent of n8n and of any provider. **[ArgoLink](https://argolink.io/gh-n8n-api-integration) is a compatible base example.** Last checked: 2026-10-07.
+A small, inspectable n8n workflow for calling chat and image endpoints through an OpenAI-compatible API. It is an independent community guide, not n8n documentation and not affiliated with n8n, ArgoLink, or a model vendor. **[ArgoLink](https://argolink.io/gh-n8n-api-integration)** is the compatible base example. Last checked: 2026-10-07.
 
-## Import
+## Import the workflow
 
-Open workflows/chat-and-image.json with n8n's Import from File. It uses built-in Manual Trigger and HTTP Request nodes and is inactive on import. Set instance environment variables MODEL_BASE_URL and MODEL_API_KEY through the n8n process environment, not in a Code node or exported workflow. The example expects a JSON input with prompt. Its chat body uses gpt-5.4 and the base URL appends chat/completions.
+`workflows/chat-and-image.json` is intentionally inactive and contains one Manual Trigger with two explicit HTTP Request branches:
 
-Create a separate HTTP Request node for images after reading the selected image model's body and output format. Do not assume the chat credential or field names apply to images. Video uses an asynchronous submit/status/content workflow and should remain separate from this generic import.
+- **Chat Completions** → `POST {MODEL_BASE_URL}/chat/completions`, default model `gpt-5.4`;
+- **Image Generation** → `POST {MODEL_BASE_URL}/images/generations`, default model `gpt-image-2`.
 
-## Credentials
+Import through n8n's workflow menu, inspect the expressions, and leave it inactive until the secret is configured. The nodes read `MODEL_BASE_URL`, `MODEL_API_KEY`, `TEXT_MODEL`, and `IMAGE_MODEL` from the n8n process environment. No key is embedded in the JSON. Each request sets a descriptive `User-Agent` and a 60-second timeout.
 
-n8n's OpenAI credential and base URL support vary by version. A generic Header Auth credential or an HTTP Request node with an environment-backed Authorization header is easier to inspect, but never export a real value. Verify the current n8n credential docs and inspect the node's resolved request. The JSON includes a User-Agent and no static key.
+```bash
+export MODEL_BASE_URL='https://argolink.io/v1'
+export MODEL_API_KEY='replace-me'
+export TEXT_MODEL='gpt-5.4'
+export IMAGE_MODEL='gpt-image-2'
+```
 
-## Reliability
+The manual item may contain `prompt`, `image_prompt`, and `image_size`; fallback values make the imported graph easy to inspect. In a real workflow, replace the Manual Trigger with a validated Webhook or queue input and add authentication, body limits, and a redacted execution policy.
 
-Set an explicit HTTP timeout. Disable automatic retry on a generation POST unless an idempotency contract exists. For a 429 or 503, honor Retry-After in a Code node or queue. For a text response, retain the response ID and usage. For image/video media, retain the output URL only in a private execution record. A browser or n8n timeout is not evidence that the server did not accept the request.
+## Why HTTP Request nodes
 
-## Model selection
+n8n's built-in nodes and credentials evolve by release. The [n8n documentation](https://docs.n8n.io/) describes using the HTTP Request node for custom API operations and environment-backed settings. An OpenAI credential can be convenient for a chat-compatible route, but a generic Header Auth credential or explicit HTTP Request node makes the base URL, header, timeout, and request body visible during review. Never export a resolved credential.
 
-Read the live ArgoLink catalog and model page for model ID, context, tools, image size, or video limits. This guide does not publish a price table. Use https://argolink.io/v1 only when the target client appends the documented endpoint path. A mismatched root can produce a misleading 404.
+Use `https://argolink.io/v1` as the base, not a full route. If the node URL already contains `/chat/completions` or `/images/generations`, do not append another copy of the path. The workflow's expressions apply the path once.
 
-## Validation and FAQ
+## Model and protocol checks
 
-python3 -m unittest discover -s tests checks the imported graph offline; it does not run n8n. **Why is this separate from the Seedance n8n workflow?** This guide covers general chat/image connections; the other workflow owns video polling. **Can I expose it publicly?** Add authentication, body limits, rate limits, and redacted logs first. **Why does a field fail?** Compare the resolved JSON with the current model page instead of adding blind retries.
+Read the live [ArgoLink catalog](https://argolink.io/v1/models) and model page on the day you activate a workflow. At the 2026-10-07 check, GPT-5.4 was a Responses model with 1,050,000 context and 128,000 maximum output; if your n8n release only emits Chat Completions, use a model that explicitly documents that family or use an HTTP Request body matching the Responses contract. For image generation, verify the exact size, quality, reference, and output fields on the selected image page. A model dropdown label is not protocol evidence.
+
+This workflow does not include video. Video is an asynchronous contract: submit `POST /v1/videos/generations` once, persist the `request_id`, poll `GET /v1/videos/{request_id}` while `pending`, and download `GET /v1/videos/{request_id}/content` only after `done`. Keep that lifecycle in a separate workflow with explicit recovery logic.
+
+## Reliability and security
+
+- Set node timeout and workflow execution timeout deliberately; do not rely on a browser timeout.
+- Treat a timed-out generation POST as unknown. Persist a request ID before deciding whether to retry.
+- For 429 or 503, honor `Retry-After`; never use n8n's automatic retry on a side-effecting POST unless idempotency is documented.
+- Redact `Authorization`, request bodies containing user content, and signed media URLs in execution logs.
+- Use a private credential or environment secret; n8n export files are easy to share accidentally.
+- Validate response shape before passing content to another node. Record response ID, model, usage, and catalog date for accounting.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Tests parse the import JSON and inspect the credential, route, timeout, and inactive-state boundaries. They do not start n8n or send an API request.

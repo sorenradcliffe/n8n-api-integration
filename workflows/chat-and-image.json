@@ -1,1 +1,105 @@
-{"name":"OpenAI-compatible chat and image","nodes":[{"parameters":{},"name":"Manual Trigger","type":"n8n-nodes-base.manualTrigger","typeVersion":1,"position":[0,0]},{"parameters":{"method":"POST","url":"={{$env.MODEL_BASE_URL + '/chat/completions'}}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"={{'Bearer '+$env.MODEL_API_KEY}"},{"name":"User-Agent","value":"n8n-api-integration/1.0"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\"model\":\"gpt-5.4\",\"messages\":[{\"role\":\"user\",\"content\":\"{{$json.prompt}}\"}]}"},"name":"Chat","type":"n8n-nodes-base.httpRequest","typeVersion":4.5,"position":[240,0]}],"connections":{"Manual Trigger":{"main":[[{"node":"Chat","type":"main","index":0}]]}},"active":false,"settings":{"executionOrder":"v1"}}
+{
+  "name": "ArgoLink chat and image (manual)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.MODEL_BASE_URL || 'https://argolink.io/v1') + '/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.MODEL_API_KEY}}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-api-integration/1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.TEXT_MODEL || 'gpt-5.4'), messages: [{ role: 'user', content: ($json.prompt || 'Say one sentence about n8n') }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "chat-request",
+      "name": "Chat Completions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.MODEL_BASE_URL || 'https://argolink.io/v1') + '/images/generations'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.MODEL_API_KEY}}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-api-integration/1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.IMAGE_MODEL || 'gpt-image-2'), prompt: ($json.image_prompt || $json.prompt || 'A blue paper boat'), size: ($json.image_size || '1024x1024') }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "image-request",
+      "name": "Image Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Chat Completions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Image Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "local-template"
+}
