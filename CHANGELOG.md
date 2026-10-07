@@ -4,3 +4,4 @@
 
 - Rebuilt the public tree as an Argolink-only integration guide.
 - Added explicit request, validation, security, and failure-handling notes.
+
